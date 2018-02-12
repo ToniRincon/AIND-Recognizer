@@ -77,7 +77,26 @@ class SelectorBIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on BIC scores
-        raise NotImplementedError
+        # raise NotImplementedError
+        
+        # best score is the s
+        best_bic=float('inf')
+        best_model=None
+        
+        for n_components in range(self.min_n_components, self.max_n_components+1):
+            try:
+                model = GaussianHMM(n_components=n_components, n_iter=1000).fit(self.X, self.lengths)
+                logL= model.score(self.X,self.lengths)
+                n_features = len(self.X[0])
+                p = n_components**2+2*n_components*n_features-1
+                N = len(self.X)
+                bic = -2*logL+p*np.log(N)
+                if bic<best_bic:
+                    best_bic = bic
+                    best_model = model
+            except:
+                pass
+        return best_model
 
 
 class SelectorDIC(ModelSelector):
@@ -94,7 +113,40 @@ class SelectorDIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        # raise NotImplementedError
+        
+        M = len(self.hwords)
+        best_dic=float('-inf')
+        best_model=None
+        
+        for n_components in range(self.min_n_components, self.max_n_components+1):
+            #print(self.this_word,n_components)
+            try:
+                model = GaussianHMM(n_components=n_components, n_iter=1000).fit(self.X, self.lengths)
+                #print(self.this_word,n_components, 'model')
+                logL= model.score(self.X,self.lengths)
+                #print(self.this_word,n_components,'score')
+                other_logL_sum=0
+                for other_word in self.words:
+                    if other_word == self.this_word:
+                        continue
+                    #print(self.this_word,n_components,other_word)
+                    other_X, other_lengths = self.hwords[other_word]
+                    other_logL = model.score(other_X,other_lengths)
+                    #print(self.this_word,n_components,other_word,'score')
+                    other_logL_sum += other_logL
+                dic = logL-other_logL_sum/(M-1)
+                #print(self.this_word,n_components,'dic',dic)
+                
+                if dic>best_dic:
+                    best_dic = dic
+                    best_model = model
+                    #print(self.this_word,n_components,'best')
+            except:
+                #print(self.this_word,n_components,'except')
+                pass
+        return best_model
+
 
 
 class SelectorCV(ModelSelector):
@@ -106,4 +158,24 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
-        raise NotImplementedError
+        # raise NotImplementedError
+        best_cv=float('-inf')
+        best_model=None
+        for n_components in range(self.min_n_components, self.max_n_components+1):
+            try:
+                split_n = min(len(self.sequences),3) # in case there are least than 3 sequences
+                split_method = KFold(split_n)
+                logL_sum = 0
+                for train_index, test_index in split_method.split(self.sequences):
+                    X_train, lengths_train = combine_sequences(train_index, self.sequences)
+                    X_test, lengths_test  = combine_sequences(test_index, self.sequences)
+                    model = GaussianHMM(n_components=n_components, n_iter=1000).fit(X_train, lengths_train)
+                    logL = model.score(X_test,lengths_test)
+                    logL_sum += logL
+                logL_avg = logL_sum/split_n
+                if logL_avg>best_cv:
+                    best_cv = logL_avg
+                    best_model = GaussianHMM(n_components=n_components, n_iter=1000).fit(self.X, self.lengths)
+            except:
+                pass
+        return best_model
